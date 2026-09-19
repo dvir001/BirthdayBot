@@ -24,6 +24,7 @@ def test_workflows_pin_actions_and_publish_both_architectures():
                 if "uses" in step:
                     assert re.fullmatch(r"[\w/-]+@[a-f0-9]{40}", step["uses"])
     ci = yaml.safe_load((ROOT / ".github/workflows/ci.yml").read_text())
+    assert "'" not in ci["jobs"]["checks"]["services"]["postgres"]["options"]
     build = ci["jobs"]["image"]["steps"][-1]
     assert build["with"]["platforms"] == "linux/amd64,linux/arm64"
     assert ci["jobs"]["image"]["needs"] == "checks"
