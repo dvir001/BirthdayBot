@@ -5,9 +5,10 @@ native Discord forms, and PostgreSQL storage. Licensed under MIT.
 
 ## Commands
 
-- `/birthday timezone:<search>`: opens setup for new users or changes an existing
-  timezone using searchable IANA timezone suggestions. `/birthday` without the
-  option opens the private dashboard for an existing user.
+- `/birthday`: opens setup with a dropdown of 25 common timezones for new users;
+  otherwise opens a private dashboard with configuration, edit, preview,
+  pause/resume, skip, and removal. Existing users can search every IANA timezone
+  with the optional `/birthday timezone:<search>` argument.
 - `/birthday-admin channel`: sets the server's birthday text channel.
 - `/birthday-admin enabled`: enables or disables all scheduling for the server.
   Both administrator commands require Manage Server at runtime.

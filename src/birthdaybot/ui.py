@@ -19,38 +19,56 @@ COMMON_TIMEZONES = (
     "America/Chicago",
     "America/Denver",
     "America/Los_Angeles",
-    "America/Toronto",
+    "America/Anchorage",
+    "Pacific/Honolulu",
     "America/Sao_Paulo",
+    "America/Argentina/Buenos_Aires",
     "Europe/London",
     "Europe/Paris",
-    "Europe/Berlin",
-    "Europe/Madrid",
-    "Europe/Rome",
-    "Europe/Warsaw",
-    "Europe/Kyiv",
+    "Europe/Athens",
+    "Europe/Moscow",
+    "Africa/Cairo",
     "Asia/Jerusalem",
     "Asia/Dubai",
+    "Asia/Karachi",
     "Asia/Kolkata",
+    "Asia/Dhaka",
+    "Asia/Bangkok",
     "Asia/Singapore",
-    "Asia/Shanghai",
     "Asia/Tokyo",
+    "Australia/Adelaide",
     "Australia/Sydney",
     "Pacific/Auckland",
-    "Africa/Cairo",
-    "Africa/Johannesburg",
 )
 TIMEZONES = tuple(sorted(available_timezones()))
 
 
-def timezone_choices(current: str) -> list[app_commands.Choice[str]]:
-    if not current:
-        matches = COMMON_TIMEZONES
-    else:
-        query = current.casefold()
-        matches = sorted(
-            (timezone for timezone in TIMEZONES if query in timezone.casefold()),
-            key=lambda timezone: (not timezone.casefold().startswith(query), timezone),
+def timezone_label(timezone: str) -> str:
+    offset = datetime.now(UTC).astimezone(ZoneInfo(timezone)).utcoffset()
+    minutes = int(offset.total_seconds() // 60)
+    sign = "+" if minutes >= 0 else "-"
+    hours, minutes = divmod(abs(minutes), 60)
+    locations = t(f"timezone.{timezone}")
+    return f"(UTC{sign}{hours:02d}:{minutes:02d}) {locations}"
+
+
+def timezone_options(selected: str | None = None) -> list[discord.SelectOption]:
+    return [
+        discord.SelectOption(
+            label=timezone_label(timezone),
+            value=timezone,
+            default=timezone == selected,
         )
+        for timezone in COMMON_TIMEZONES
+    ]
+
+
+def timezone_choices(current: str) -> list[app_commands.Choice[str]]:
+    query = current.casefold()
+    matches = sorted(
+        (timezone for timezone in TIMEZONES if query in timezone.casefold()),
+        key=lambda timezone: (not timezone.casefold().startswith(query), timezone),
+    )
     return [app_commands.Choice(name=timezone, value=timezone) for timezone in matches[:25]]
 
 
@@ -98,15 +116,18 @@ async def dashboard(bot, guild_id: int, user_id: int):
 
 
 class BirthdayModal(discord.ui.Modal):
-    def __init__(self, bot, guild_id: int, user_id: int, timezone: str, profile=None):
+    def __init__(self, bot, guild_id: int, user_id: int, profile=None):
         super().__init__(title=t("setup.title"), timeout=600)
         self.bot, self.guild_id, self.user_id = bot, guild_id, user_id
-        self.timezone = timezone
         self.birthday = discord.ui.TextInput(
             placeholder=t("setup.date_placeholder"),
             min_length=3,
             max_length=5,
             default=f"{profile['day']:02d}/{profile['month']:02d}" if profile else None,
+        )
+        self.timezone = discord.ui.Select(
+            placeholder=t("setup.timezone_placeholder"),
+            options=timezone_options(profile["timezone"] if profile else None),
         )
         self.reminders = discord.ui.Select(
             placeholder=t("setup.reminders_placeholder"),
@@ -125,6 +146,7 @@ class BirthdayModal(discord.ui.Modal):
         self.upload = discord.ui.FileUpload(required=False, min_values=0, max_values=1)
         for text, component in [
             ("setup.date", self.birthday),
+            ("setup.timezone", self.timezone),
             ("setup.reminders", self.reminders),
         ]:
             self.add_item(discord.ui.Label(text=t(text), component=component))
@@ -167,7 +189,7 @@ class BirthdayModal(discord.ui.Modal):
             self.user_id,
             month,
             day,
-            self.timezone,
+            self.timezone.values[0],
             list(self.reminders.values),
             data,
             filename,
@@ -209,7 +231,7 @@ class Dashboard(OwnedView):
     async def edit(self, interaction, button):
         profile = await self.bot.db.get_profile(self.guild_id, self.user_id)
         await interaction.response.send_modal(
-            BirthdayModal(self.bot, self.guild_id, self.user_id, profile["timezone"], profile)
+            BirthdayModal(self.bot, self.guild_id, self.user_id, profile)
         )
 
     @discord.ui.button(label=t("action.preview"))
@@ -368,26 +390,18 @@ def register_commands(bot):
     @app_commands.describe(timezone=t("command.timezone_option"))
     async def birthday(interaction: discord.Interaction, timezone: str | None = None):
         profile = await bot.db.get_profile(interaction.guild_id, interaction.user.id)
-        if timezone is not None:
-            try:
-                ZoneInfo(timezone)
-            except (ZoneInfoNotFoundError, ValueError):
-                await interaction.response.send_message(t("error.timezone"), ephemeral=True)
-                return
         if profile is None:
-            if timezone is None:
-                await interaction.response.send_message(
-                    t("error.timezone_required"), ephemeral=True
-                )
-                return
             await interaction.response.send_modal(
-                BirthdayModal(bot, interaction.guild_id, interaction.user.id, timezone)
-            )
-        elif timezone is not None:
-            await interaction.response.send_modal(
-                BirthdayModal(bot, interaction.guild_id, interaction.user.id, timezone, profile)
+                BirthdayModal(bot, interaction.guild_id, interaction.user.id)
             )
         else:
+            if timezone is not None:
+                try:
+                    ZoneInfo(timezone)
+                except (ZoneInfoNotFoundError, ValueError):
+                    await interaction.response.send_message(t("error.timezone"), ephemeral=True)
+                    return
+                await bot.db.set_timezone(interaction.guild_id, interaction.user.id, timezone)
             await interaction.response.defer(ephemeral=True)
             content, view = await dashboard(bot, interaction.guild_id, interaction.user.id)
             await interaction.followup.send(content, view=view, ephemeral=True)
