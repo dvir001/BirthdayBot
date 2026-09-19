@@ -77,13 +77,6 @@ class Database:
             (enabled, guild_id, user_id),
         )
 
-    async def set_timezone(self, guild_id: int, user_id: int, timezone: str):
-        await self.execute(
-            """UPDATE birthdays SET timezone = %s, updated_at = now()
-               WHERE guild_id = %s AND user_id = %s""",
-            (timezone, guild_id, user_id),
-        )
-
     async def skip(self, guild_id: int, user_id: int, birthday: date | None):
         await self.execute(
             "UPDATE birthdays SET skip_date = %s WHERE guild_id = %s AND user_id = %s",

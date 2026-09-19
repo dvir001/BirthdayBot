@@ -1,8 +1,10 @@
 import io
 import logging
 import re
+from collections import defaultdict
 from datetime import UTC, date, datetime
-from zoneinfo import ZoneInfo, ZoneInfoNotFoundError, available_timezones
+from importlib.resources import files
+from zoneinfo import ZoneInfo
 
 import discord
 from discord import app_commands
@@ -13,63 +15,62 @@ from birthdaybot.media import validate_metadata, validate_video
 
 log = logging.getLogger(__name__)
 
-COMMON_TIMEZONES = (
-    "UTC",
-    "America/New_York",
-    "America/Chicago",
-    "America/Denver",
-    "America/Los_Angeles",
-    "America/Anchorage",
-    "Pacific/Honolulu",
-    "America/Sao_Paulo",
-    "America/Argentina/Buenos_Aires",
-    "Europe/London",
-    "Europe/Paris",
-    "Europe/Athens",
-    "Europe/Moscow",
-    "Africa/Cairo",
-    "Asia/Jerusalem",
-    "Asia/Dubai",
-    "Asia/Karachi",
-    "Asia/Kolkata",
-    "Asia/Dhaka",
-    "Asia/Bangkok",
-    "Asia/Singapore",
-    "Asia/Tokyo",
-    "Australia/Adelaide",
-    "Australia/Sydney",
-    "Pacific/Auckland",
-)
-TIMEZONES = tuple(sorted(available_timezones()))
+REGION_PREFIXES = {
+    "africa": ("Africa/",),
+    "americas": ("America/",),
+    "asia": ("Asia/",),
+    "europe": ("Europe/",),
+    "oceania": ("Australia/", "Pacific/"),
+    "atlantic_indian": ("Atlantic/", "Indian/"),
+    "polar": ("Antarctica/", "Arctic/"),
+    "utc": (),
+}
 
 
-def timezone_label(timezone: str) -> str:
+def canonical_timezones() -> tuple[str, ...]:
+    table = files("tzdata.zoneinfo").joinpath("zone1970.tab").read_text(encoding="utf-8")
+    records = (line for line in table.splitlines() if line and not line.startswith("#"))
+    zones = {line.split("\t")[2] for line in records}
+    return tuple(sorted(zones | {"UTC"}))
+
+
+TIMEZONES = canonical_timezones()
+
+
+def utc_offset(timezone: str) -> int:
     offset = datetime.now(UTC).astimezone(ZoneInfo(timezone)).utcoffset()
-    minutes = int(offset.total_seconds() // 60)
+    return int(offset.total_seconds() // 60)
+
+
+def offset_label(minutes: int) -> str:
     sign = "+" if minutes >= 0 else "-"
     hours, minutes = divmod(abs(minutes), 60)
-    locations = t(f"timezone.{timezone}")
-    return f"(UTC{sign}{hours:02d}:{minutes:02d}) {locations}"
+    return f"UTC{sign}{hours:02d}:{minutes:02d}"
 
 
-def timezone_options(selected: str | None = None) -> list[discord.SelectOption]:
-    return [
-        discord.SelectOption(
-            label=timezone_label(timezone),
-            value=timezone,
-            default=timezone == selected,
-        )
-        for timezone in COMMON_TIMEZONES
-    ]
+def location_label(timezone: str) -> str:
+    return " / ".join(part.replace("_", " ") for part in timezone.split("/")[1:]) or "UTC"
 
 
-def timezone_choices(current: str) -> list[app_commands.Choice[str]]:
-    query = current.casefold()
-    matches = sorted(
-        (timezone for timezone in TIMEZONES if query in timezone.casefold()),
-        key=lambda timezone: (not timezone.casefold().startswith(query), timezone),
-    )
-    return [app_commands.Choice(name=timezone, value=timezone) for timezone in matches[:25]]
+def region_timezones(region: str) -> list[str]:
+    if region == "utc":
+        return ["UTC"]
+    return [timezone for timezone in TIMEZONES if timezone.startswith(REGION_PREFIXES[region])]
+
+
+def timezone_groups(region: str) -> list[tuple[str, str, list[str]]]:
+    offsets = defaultdict(list)
+    for timezone in region_timezones(region):
+        offsets[utc_offset(timezone)].append(timezone)
+    groups = []
+    for offset, zones in sorted(offsets.items()):
+        for index in range(0, len(zones), 25):
+            chunk = zones[index : index + 25]
+            locations = f"{location_label(chunk[0])} - {location_label(chunk[-1])}"
+            groups.append(
+                (f"{offset}:{index // 25}", f"({offset_label(offset)}) {locations}", chunk)
+            )
+    return groups
 
 
 async def report_error(interaction: discord.Interaction, error: Exception):
@@ -116,18 +117,15 @@ async def dashboard(bot, guild_id: int, user_id: int):
 
 
 class BirthdayModal(discord.ui.Modal):
-    def __init__(self, bot, guild_id: int, user_id: int, profile=None):
+    def __init__(self, bot, guild_id: int, user_id: int, timezone: str, profile=None):
         super().__init__(title=t("setup.title"), timeout=600)
         self.bot, self.guild_id, self.user_id = bot, guild_id, user_id
+        self.timezone = timezone
         self.birthday = discord.ui.TextInput(
             placeholder=t("setup.date_placeholder"),
             min_length=3,
             max_length=5,
             default=f"{profile['day']:02d}/{profile['month']:02d}" if profile else None,
-        )
-        self.timezone = discord.ui.Select(
-            placeholder=t("setup.timezone_placeholder"),
-            options=timezone_options(profile["timezone"] if profile else None),
         )
         self.reminders = discord.ui.Select(
             placeholder=t("setup.reminders_placeholder"),
@@ -146,7 +144,6 @@ class BirthdayModal(discord.ui.Modal):
         self.upload = discord.ui.FileUpload(required=False, min_values=0, max_values=1)
         for text, component in [
             ("setup.date", self.birthday),
-            ("setup.timezone", self.timezone),
             ("setup.reminders", self.reminders),
         ]:
             self.add_item(discord.ui.Label(text=t(text), component=component))
@@ -189,7 +186,7 @@ class BirthdayModal(discord.ui.Modal):
             self.user_id,
             month,
             day,
-            self.timezone.values[0],
+            self.timezone,
             list(self.reminders.values),
             data,
             filename,
@@ -216,6 +213,86 @@ class OwnedView(discord.ui.View):
         await report_error(interaction, error)
 
 
+class WizardSelect(discord.ui.Select):
+    def __init__(self, step: str, **kwargs):
+        super().__init__(**kwargs)
+        self.step = step
+
+    async def callback(self, interaction: discord.Interaction):
+        await self.view.choose(interaction, self.step, self.values[0])
+
+
+class TimezoneWizard(OwnedView):
+    def __init__(self, bot, guild_id: int, user_id: int, profile=None):
+        super().__init__(bot, guild_id, user_id)
+        self.profile = profile
+        self.region = None
+        self.group = None
+        self.rebuild()
+
+    def rebuild(self):
+        self.clear_items()
+        self.add_item(
+            WizardSelect(
+                "region",
+                placeholder=t("setup.region_placeholder"),
+                options=[
+                    discord.SelectOption(
+                        label=t(f"region.{region}"),
+                        value=region,
+                        default=region == self.region,
+                    )
+                    for region in REGION_PREFIXES
+                ],
+            )
+        )
+        if self.region is None:
+            return
+        groups = timezone_groups(self.region)
+        self.add_item(
+            WizardSelect(
+                "subregion",
+                placeholder=t("setup.subregion_placeholder"),
+                options=[self.subregion_option(key, label) for key, label, zones in groups],
+            )
+        )
+        selected_group = next((group for group in groups if group[0] == self.group), None)
+        if selected_group is None:
+            return
+        self.add_item(
+            WizardSelect(
+                "timezone",
+                placeholder=t("setup.timezone_placeholder"),
+                options=[
+                    discord.SelectOption(
+                        label=f"({offset_label(utc_offset(timezone))}) {location_label(timezone)}"[
+                            :100
+                        ],
+                        value=timezone,
+                        description=timezone,
+                    )
+                    for timezone in selected_group[2]
+                ],
+            )
+        )
+
+    def subregion_option(self, key: str, label: str) -> discord.SelectOption:
+        return discord.SelectOption(label=label[:100], value=key, default=key == self.group)
+
+    async def choose(self, interaction: discord.Interaction, step: str, value: str):
+        if step == "timezone":
+            await interaction.response.send_modal(
+                BirthdayModal(self.bot, self.guild_id, self.user_id, value, self.profile)
+            )
+            return
+        if step == "region":
+            self.region, self.group = value, None
+        else:
+            self.group = value
+        self.rebuild()
+        await interaction.response.edit_message(content=t("setup.timezone_prompt"), view=self)
+
+
 class Dashboard(OwnedView):
     def __init__(self, bot, guild_id: int, user_id: int, profile: dict):
         super().__init__(bot, guild_id, user_id)
@@ -230,8 +307,9 @@ class Dashboard(OwnedView):
     @discord.ui.button(label=t("action.edit"), style=discord.ButtonStyle.primary)
     async def edit(self, interaction, button):
         profile = await self.bot.db.get_profile(self.guild_id, self.user_id)
-        await interaction.response.send_modal(
-            BirthdayModal(self.bot, self.guild_id, self.user_id, profile)
+        await interaction.response.edit_message(
+            content=t("setup.timezone_prompt"),
+            view=TimezoneWizard(self.bot, self.guild_id, self.user_id, profile),
         )
 
     @discord.ui.button(label=t("action.preview"))
@@ -387,28 +465,18 @@ def channel_usable(channel, member) -> bool:
 def register_commands(bot):
     @bot.tree.command(name="birthday", description=t("command.birthday"))
     @app_commands.guild_only()
-    @app_commands.describe(timezone=t("command.timezone_option"))
-    async def birthday(interaction: discord.Interaction, timezone: str | None = None):
+    async def birthday(interaction: discord.Interaction):
         profile = await bot.db.get_profile(interaction.guild_id, interaction.user.id)
         if profile is None:
-            await interaction.response.send_modal(
-                BirthdayModal(bot, interaction.guild_id, interaction.user.id)
+            await interaction.response.send_message(
+                t("setup.timezone_prompt"),
+                view=TimezoneWizard(bot, interaction.guild_id, interaction.user.id),
+                ephemeral=True,
             )
         else:
-            if timezone is not None:
-                try:
-                    ZoneInfo(timezone)
-                except (ZoneInfoNotFoundError, ValueError):
-                    await interaction.response.send_message(t("error.timezone"), ephemeral=True)
-                    return
-                await bot.db.set_timezone(interaction.guild_id, interaction.user.id, timezone)
             await interaction.response.defer(ephemeral=True)
             content, view = await dashboard(bot, interaction.guild_id, interaction.user.id)
             await interaction.followup.send(content, view=view, ephemeral=True)
-
-    @birthday.autocomplete("timezone")
-    async def birthday_timezone(interaction: discord.Interaction, current: str):
-        return timezone_choices(current)
 
     admin = app_commands.Group(
         name="birthday-admin",

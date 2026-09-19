@@ -5,40 +5,37 @@ from unittest.mock import AsyncMock
 
 from birthdaybot.bot import BirthdayBot
 from birthdaybot.ui import (
+    REGION_PREFIXES,
+    TIMEZONES,
     BirthdayModal,
     NoticeButton,
+    TimezoneWizard,
     notice_view,
-    timezone_choices,
-    timezone_options,
+    region_timezones,
+    timezone_groups,
 )
 
 
 async def test_modal_uses_native_labels_and_upload():
-    modal = BirthdayModal(None, 1, 2)
+    modal = BirthdayModal(None, 1, 2, "Asia/Jerusalem")
     payload = modal.to_dict()
-    assert len(payload["components"]) == 4
+    assert len(payload["components"]) == 3
     assert all(component["type"] == 18 for component in payload["components"])
     assert payload["components"][-1]["component"]["type"] == 19
-    assert len(payload["components"][1]["component"]["options"]) == 25
-    assert payload["components"][2]["component"]["min_values"] == 0
+    assert payload["components"][1]["component"]["min_values"] == 0
 
 
-def test_timezone_dropdown_uses_offsets_and_only_curated_zones():
-    options = timezone_options("Asia/Jerusalem")
-    selected = next(option for option in options if option.default)
-    assert selected.value == "Asia/Jerusalem"
-    assert selected.label.startswith("(UTC+")
-    assert len(options) == 25
+def test_timezone_wizard_covers_canonical_zones_within_discord_limits():
+    covered = set()
+    for region in REGION_PREFIXES:
+        groups = timezone_groups(region)
+        assert len(groups) <= 25
+        assert all(len(zones) <= 25 for key, label, zones in groups)
+        covered.update(region_timezones(region))
+    assert covered == set(TIMEZONES)
 
-    unsupported = timezone_options("America/Phoenix")
-    assert all(option.value != "America/Phoenix" for option in unsupported)
-    assert not any(option.default for option in unsupported)
-
-
-def test_timezone_command_searches_all_iana_zones_with_discord_limit():
-    choices = timezone_choices("phoenix")
-    assert any(choice.value == "America/Phoenix" for choice in choices)
-    assert len(timezone_choices("america")) == 25
+    wizard = TimezoneWizard(None, 1, 2)
+    assert len(wizard.children[0].options) == len(REGION_PREFIXES)
 
 
 async def test_notice_is_persistent_and_restores():
@@ -66,37 +63,6 @@ async def test_commands_register_without_login():
     assert not bot.intents.members
     assert not bot.intents.message_content
     assert len(bot.tree.get_command("birthday-admin").commands) == 2
-    await bot.close()
-
-
-async def test_birthday_command_updates_uncommon_timezone():
-    profile = {
-        "day": 1,
-        "month": 5,
-        "timezone": "America/Phoenix",
-        "reminders": [],
-        "enabled": True,
-        "video_name": None,
-        "skip_date": None,
-    }
-    bot = BirthdayBot("postgresql://localhost/test")
-    bot.db = SimpleNamespace(
-        get_profile=AsyncMock(return_value=profile),
-        set_timezone=AsyncMock(),
-        settings=AsyncMock(return_value={"enabled": True, "channel_id": 3}),
-        close=AsyncMock(),
-    )
-    interaction = SimpleNamespace(
-        guild_id=1,
-        user=SimpleNamespace(id=2),
-        response=SimpleNamespace(defer=AsyncMock()),
-        followup=SimpleNamespace(send=AsyncMock()),
-    )
-
-    await bot.tree.get_command("birthday").callback(interaction, "America/Phoenix")
-
-    bot.db.set_timezone.assert_awaited_once_with(1, 2, "America/Phoenix")
-    interaction.followup.send.assert_awaited_once()
     await bot.close()
 
 
