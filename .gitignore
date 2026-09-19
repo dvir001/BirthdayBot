@@ -179,3 +179,8 @@ cython_debug/
 #  refer to https://docs.cursor.com/context/ignore-files
 .cursorignore
 .cursorindexingignore
+
+# Local secrets; keep the distributable template and project guidance.
+.env.*
+!.env.example
+!AGENTS.md
