@@ -1,5 +1,5 @@
 services:
-  bot:
+  birthdaybot-app:
     image: ${BIRTHDAYBOT_IMAGE:-ghcr.io/dvir001/birthdaybot:latest}
     restart: unless-stopped
     init: true
@@ -12,7 +12,7 @@ services:
       DISCORD_TOKEN: ${DISCORD_TOKEN:?Set DISCORD_TOKEN in .env}
       DATABASE_URL: ${DATABASE_URL:?Set DATABASE_URL in .env}
     depends_on:
-      db:
+      birthdaybot-db:
         condition: service_healthy
     logging:
       driver: json-file
@@ -20,7 +20,7 @@ services:
         max-size: 10m
         max-file: "3"
 
-  db:
+  birthdaybot-db:
     image: postgres:18-alpine
     restart: unless-stopped
     environment:

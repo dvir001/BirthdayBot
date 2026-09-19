@@ -10,10 +10,12 @@ ROOT = Path(__file__).resolve().parents[1]
 
 def test_deployment_uses_published_image_and_private_database():
     compose = yaml.safe_load((ROOT / "docker-compose.yml").read_text())
-    assert "build" not in compose["services"]["bot"]
-    assert "ghcr.io/dvir001/birthdaybot" in compose["services"]["bot"]["image"]
-    assert "ports" not in compose["services"]["db"]
-    assert compose["services"]["bot"]["read_only"]
+    app = compose["services"]["birthdaybot-app"]
+    database = compose["services"]["birthdaybot-db"]
+    assert "build" not in app
+    assert "ghcr.io/dvir001/birthdaybot" in app["image"]
+    assert "ports" not in database
+    assert app["read_only"]
 
 
 def test_workflows_pin_actions_and_publish_both_architectures():

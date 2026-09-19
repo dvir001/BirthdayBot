@@ -55,8 +55,8 @@ environment, or copy `.env.example` to `.env` and use:
 uv run --env-file .env birthdaybot
 ```
 
-For local execution, change the database hostname from `db` to the hostname of
-your PostgreSQL instance. No Docker installation is required on a development
+For local execution, change the database hostname from `birthdaybot-db` to the
+hostname of your PostgreSQL instance. No Docker installation is required on a development
 machine. Set optional `DISCORD_TEST_GUILD_ID` for immediate development command
 registration in one server; otherwise commands are registered globally and may
 take time to propagate. Production should leave this unset. The bot creates its
@@ -73,7 +73,7 @@ host, place `docker-compose.yml` and a configured `.env` together, then run:
 ```sh
 docker compose pull
 docker compose up -d
-docker compose logs -f bot
+docker compose logs -f birthdaybot-app
 ```
 
 Use a strong `POSTGRES_PASSWORD` and the same URL-encoded password in `DATABASE_URL`.
