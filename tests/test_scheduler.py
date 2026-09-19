@@ -54,7 +54,10 @@ async def test_birthday_attaches_video_and_mentions_only_member(delivery):
     scheduler, profile, event, settings, guild, member, channel = delivery
     await scheduler.deliver(profile, event, settings)
     scheduler.bot.db.claim.assert_awaited_once_with(profile, event, settings["channel_id"])
+    content = channel.send.call_args.args[0]
     kwargs = channel.send.call_args.kwargs
+    assert member.mention in content
+    assert "embed" not in kwargs
     assert kwargs["files"][0].filename == "birthday.mp4"
     assert kwargs["allowed_mentions"].users == [member]
     assert not kwargs["allowed_mentions"].everyone

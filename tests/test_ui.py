@@ -4,16 +4,22 @@ from types import SimpleNamespace
 from unittest.mock import AsyncMock
 
 from birthdaybot.bot import BirthdayBot
-from birthdaybot.ui import BirthdayModal, NoticeButton, notice_view
+from birthdaybot.ui import BirthdayModal, NoticeButton, notice_view, timezone_choices
 
 
 async def test_modal_uses_native_labels_and_upload():
-    modal = BirthdayModal(None, 1, 2)
+    modal = BirthdayModal(None, 1, 2, "UTC")
     payload = modal.to_dict()
-    assert len(payload["components"]) == 4
+    assert len(payload["components"]) == 3
     assert all(component["type"] == 18 for component in payload["components"])
     assert payload["components"][-1]["component"]["type"] == 19
-    assert payload["components"][2]["component"]["min_values"] == 0
+    assert payload["components"][1]["component"]["min_values"] == 0
+
+
+def test_timezone_autocomplete_searches_iana_names_within_discord_limit():
+    choices = timezone_choices("jerus")
+    assert any(choice.value == "Asia/Jerusalem" for choice in choices)
+    assert len(timezone_choices("")) <= 25
 
 
 async def test_notice_is_persistent_and_restores():
