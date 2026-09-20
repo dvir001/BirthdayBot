@@ -19,11 +19,12 @@ from birthdaybot.ui import (
 
 
 async def test_modal_uses_native_labels_and_upload():
-    modal = BirthdayModal(None, 1, 2, 2)
+    modal = BirthdayModal(SimpleNamespace(max_media_bytes=5_000_000), 1, 2, 2)
     payload = modal.to_dict()
     assert len(payload["components"]) == 3
     assert all(component["type"] == 18 for component in payload["components"])
     assert payload["components"][-1]["component"]["type"] == 19
+    assert payload["components"][-1]["label"] == "Birthday media (max 5,000,000 bytes)"
     assert payload["components"][1]["component"]["min_values"] == 0
     assert modal.timezone == "UTC"
     assert modal.announcement_time == time(12)

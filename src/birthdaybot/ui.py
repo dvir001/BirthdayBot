@@ -11,7 +11,7 @@ from discord import app_commands
 
 from birthdaybot.calendar import REMINDERS, events_for_year, upcoming_birthday
 from birthdaybot.i18n import t
-from birthdaybot.media import validate_media, validate_metadata
+from birthdaybot.media import MAX_MEDIA_BYTES, validate_media, validate_metadata
 
 log = logging.getLogger(__name__)
 
@@ -126,6 +126,7 @@ class BirthdayModal(discord.ui.Modal):
             user_id,
             operator_id,
         )
+        self.max_media_bytes = getattr(bot, "max_media_bytes", MAX_MEDIA_BYTES)
         self.timezone = profile["timezone"] if profile else "UTC"
         self.announcement_time = profile["announcement_time"] if profile else time(12)
         self.birthday = discord.ui.TextInput(
@@ -156,7 +157,7 @@ class BirthdayModal(discord.ui.Modal):
             self.add_item(discord.ui.Label(text=t(text), component=component))
         self.add_item(
             discord.ui.Label(
-                text=t("setup.media"),
+                text=t("setup.media", max_media_bytes=self.max_media_bytes),
                 description=t("setup.media_hint"),
                 component=self.upload,
             )
@@ -180,13 +181,18 @@ class BirthdayModal(discord.ui.Modal):
             attachment = self.upload.values[0]
             try:
                 extension = validate_metadata(
-                    attachment.filename, attachment.size, attachment.content_type
+                    attachment.filename,
+                    attachment.size,
+                    attachment.content_type,
+                    self.max_media_bytes,
                 )
                 data = await attachment.read()
-                validate_media(data, extension)
+                validate_media(data, extension, self.max_media_bytes)
                 filename = f"birthday-media{extension}"
             except ValueError as error:
-                await interaction.followup.send(t(str(error)), ephemeral=True)
+                await interaction.followup.send(
+                    t(str(error), max_media_bytes=self.max_media_bytes), ephemeral=True
+                )
                 return
         await self.bot.db.save_profile(
             self.guild_id,

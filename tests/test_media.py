@@ -1,6 +1,11 @@
 import pytest
 
-from birthdaybot.media import MAX_MEDIA_BYTES, validate_media, validate_metadata
+from birthdaybot.media import (
+    MAX_MEDIA_BYTES,
+    parse_media_limit,
+    validate_media,
+    validate_metadata,
+)
 
 
 def test_media_metadata():
@@ -15,6 +20,22 @@ def test_media_metadata():
     ]:
         with pytest.raises(ValueError):
             validate_metadata(name, size, mime)
+
+
+def test_configurable_media_limit():
+    assert parse_media_limit(None) == MAX_MEDIA_BYTES
+    assert parse_media_limit("5000000") == 5_000_000
+    assert validate_metadata("party.mp4", 5_000_000, "video/mp4", 5_000_000) == ".mp4"
+    with pytest.raises(ValueError):
+        validate_metadata("party.mp4", 5_000_001, "video/mp4", 5_000_000)
+    with pytest.raises(ValueError):
+        validate_media(b"\x00\x00\x00\x18ftypisom", ".mp4", 11)
+    with pytest.raises(ValueError, match="MAX_MEDIA_BYTES"):
+        parse_media_limit("0")
+    with pytest.raises(ValueError, match="MAX_MEDIA_BYTES"):
+        parse_media_limit("10000001")
+    with pytest.raises(ValueError, match="MAX_MEDIA_BYTES"):
+        parse_media_limit("five")
 
 
 def test_media_signatures():

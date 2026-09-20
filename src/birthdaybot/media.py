@@ -18,9 +18,21 @@ MEDIA_TYPES = {
 }
 
 
-def validate_metadata(filename: str, size: int, content_type: str | None) -> str:
+def parse_media_limit(value: str | None) -> int:
+    try:
+        limit = MAX_MEDIA_BYTES if value is None else int(value)
+    except ValueError as error:
+        raise ValueError("MAX_MEDIA_BYTES must be an integer") from error
+    if not 0 < limit <= MAX_MEDIA_BYTES:
+        raise ValueError(f"MAX_MEDIA_BYTES must be between 1 and {MAX_MEDIA_BYTES}")
+    return limit
+
+
+def validate_metadata(
+    filename: str, size: int, content_type: str | None, max_bytes: int = MAX_MEDIA_BYTES
+) -> str:
     extension = PurePath(filename).suffix.lower()
-    if not 0 < size <= MAX_MEDIA_BYTES:
+    if not 0 < size <= max_bytes:
         raise ValueError("error.media_size")
     media_type = MEDIA_TYPES.get(extension)
     if media_type is None or (
@@ -32,8 +44,8 @@ def validate_metadata(filename: str, size: int, content_type: str | None) -> str
     return extension
 
 
-def validate_media(data: bytes, extension: str) -> None:
-    if not 0 < len(data) <= MAX_MEDIA_BYTES:
+def validate_media(data: bytes, extension: str, max_bytes: int = MAX_MEDIA_BYTES) -> None:
+    if not 0 < len(data) <= max_bytes:
         raise ValueError("error.media_size")
     valid = {
         ".jpg": data.startswith(b"\xff\xd8\xff"),
