@@ -11,7 +11,7 @@ services:
     environment:
       DISCORD_TOKEN: ${DISCORD_TOKEN:?Set DISCORD_TOKEN in .env}
       DATABASE_URL: ${DATABASE_URL:?Set DATABASE_URL in .env}
-      MAX_MEDIA_BYTES: ${MAX_MEDIA_BYTES:-10000000}
+      MAX_MEDIA_MB: ${MAX_MEDIA_MB:-10}
     depends_on:
       birthdaybot-db:
         condition: service_healthy

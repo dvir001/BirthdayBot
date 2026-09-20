@@ -26,13 +26,12 @@ occurrence; pausing suppresses all events until resumed. Tests are private previ
 and do not consume scheduled deliveries.
 
 Optional media is stored in PostgreSQL and attached to birthday posts. Set
-`MAX_MEDIA_BYTES` to an integer from 1 through 10,000,000; it defaults to the
-10,000,000-byte (10 MB) database limit. PNG, JPEG, GIF, WebP, MP4/MOV, WebM/MKV,
-AVI, MPEG, and Ogg video are supported with extension, MIME, and header checks.
-This is not transcoding or malware scanning; administrators should treat uploads
-as untrusted. An empty upload during editing preserves the current media; use
-Remove Media to delete it. Removing a birthday deletes its settings, media, and
-delivery history.
+`MAX_MEDIA_MB` to a positive whole number such as `10` or `20`; it defaults to
+10 MB. PNG, JPEG, GIF, WebP, MP4/MOV, WebM/MKV, AVI, MPEG, and Ogg video are
+supported with extension, MIME, and header checks. This is not transcoding or
+malware scanning; administrators should treat uploads as untrusted. An empty
+upload during editing preserves the current media; use Remove Media to delete it.
+Removing a birthday deletes its settings, media, and delivery history.
 
 Membership is checked directly with Discord before every scheduled delivery,
 including private notices. Missing members are never announced. An hourly audit

@@ -17,7 +17,7 @@ CREATE TABLE IF NOT EXISTS birthdays (
     skip_date DATE,
     left_at TIMESTAMPTZ,
     updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
-    media BYTEA CHECK (octet_length(media) <= 10000000),
+    media BYTEA,
     media_name TEXT,
     PRIMARY KEY (guild_id, user_id),
     CHECK (day <= EXTRACT(DAY FROM
@@ -42,6 +42,9 @@ BEGIN
         ALTER TABLE birthdays RENAME COLUMN video_name TO media_name;
     END IF;
 END $$;
+
+ALTER TABLE birthdays DROP CONSTRAINT IF EXISTS birthdays_media_check;
+ALTER TABLE birthdays DROP CONSTRAINT IF EXISTS birthdays_video_check;
 
 CREATE TABLE IF NOT EXISTS deliveries (
     guild_id BIGINT NOT NULL REFERENCES guild_settings ON DELETE CASCADE,

@@ -7,7 +7,7 @@ from discord.ext import tasks
 
 from birthdaybot.db import Database
 from birthdaybot.i18n import t
-from birthdaybot.media import MAX_MEDIA_BYTES, parse_media_limit
+from birthdaybot.media import DEFAULT_MAX_MEDIA_MB, parse_media_limit_mb
 from birthdaybot.scheduler import Scheduler
 from birthdaybot.ui import NoticeButton, register_commands, report_error
 
@@ -27,7 +27,7 @@ class BirthdayBot(discord.Client):
         self,
         database_url: str,
         test_guild_id: int | None = None,
-        max_media_bytes: int = MAX_MEDIA_BYTES,
+        max_media_mb: int = DEFAULT_MAX_MEDIA_MB,
     ):
         intents = discord.Intents.none()
         intents.guilds = True
@@ -36,7 +36,7 @@ class BirthdayBot(discord.Client):
         self.tree = CommandTree(self)
         self.scheduler = Scheduler(self)
         self.test_guild_id = test_guild_id
-        self.max_media_bytes = max_media_bytes
+        self.max_media_mb = max_media_mb
         register_commands(self)
 
     async def setup_hook(self):
@@ -88,13 +88,13 @@ def main():
         raise SystemExit("DISCORD_TOKEN and DATABASE_URL must be set")
     test_guild_id = os.environ.get("DISCORD_TEST_GUILD_ID")
     try:
-        max_media_bytes = parse_media_limit(os.environ.get("MAX_MEDIA_BYTES"))
+        max_media_mb = parse_media_limit_mb(os.environ.get("MAX_MEDIA_MB"))
     except ValueError as error:
         raise SystemExit(str(error)) from error
     bot = BirthdayBot(
         database_url,
         int(test_guild_id) if test_guild_id else None,
-        max_media_bytes,
+        max_media_mb,
     )
     bot.run(token, log_handler=None)
 

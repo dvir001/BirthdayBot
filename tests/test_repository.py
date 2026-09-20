@@ -16,6 +16,14 @@ def test_deployment_uses_published_image_and_private_database():
     assert "ghcr.io/dvir001/birthdaybot" in app["image"]
     assert "ports" not in database
     assert app["read_only"]
+    assert app["environment"]["MAX_MEDIA_MB"] == "${MAX_MEDIA_MB:-10}"
+
+
+def test_schema_removes_legacy_media_size_constraints():
+    schema = (ROOT / "src/birthdaybot/schema.sql").read_text()
+    assert "media BYTEA CHECK" not in schema
+    assert "DROP CONSTRAINT IF EXISTS birthdays_media_check" in schema
+    assert "DROP CONSTRAINT IF EXISTS birthdays_video_check" in schema
 
 
 def test_workflows_pin_actions_and_publish_both_architectures():

@@ -74,7 +74,7 @@ For multi-step tasks, state a brief plan:
 - Recheck membership before sending. Never mistake a transient Discord failure for
 	a departure. Retain departed-member data for one year; user deletion is immediate.
 - Claim deliveries before sending and preserve the documented at-most-once tradeoff.
-- Keep videos in PostgreSQL with a strict 10,000,000-byte limit. Never trust filenames.
+- Keep media in PostgreSQL and enforce the configured `MAX_MEDIA_MB` upload limit. Never trust filenames.
 - Add explicit migration steps before changing an existing database schema; startup
 	currently initializes version one's tables with idempotent DDL.
 - Keep secrets out of logs, source, and images. Commit `.env.example`, never `.env`.

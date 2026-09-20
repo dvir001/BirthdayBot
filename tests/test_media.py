@@ -1,18 +1,18 @@
 import pytest
 
 from birthdaybot.media import (
-    MAX_MEDIA_BYTES,
-    parse_media_limit,
+    DEFAULT_MAX_MEDIA_BYTES,
+    parse_media_limit_mb,
     validate_media,
     validate_metadata,
 )
 
 
 def test_media_metadata():
-    assert validate_metadata("party.MP4", MAX_MEDIA_BYTES, "video/mp4") == ".mp4"
-    assert validate_metadata("photo.JPG", MAX_MEDIA_BYTES, "image/jpeg") == ".jpg"
+    assert validate_metadata("party.MP4", DEFAULT_MAX_MEDIA_BYTES, "video/mp4") == ".mp4"
+    assert validate_metadata("photo.JPG", DEFAULT_MAX_MEDIA_BYTES, "image/jpeg") == ".jpg"
     for name, size, mime in [
-        ("party.mp4", MAX_MEDIA_BYTES + 1, "video/mp4"),
+        ("party.mp4", DEFAULT_MAX_MEDIA_BYTES + 1, "video/mp4"),
         ("party.mp4", 0, "video/mp4"),
         ("party.exe", 10, "video/mp4"),
         ("party.mp4", 10, "text/html"),
@@ -23,19 +23,19 @@ def test_media_metadata():
 
 
 def test_configurable_media_limit():
-    assert parse_media_limit(None) == MAX_MEDIA_BYTES
-    assert parse_media_limit("5000000") == 5_000_000
-    assert validate_metadata("party.mp4", 5_000_000, "video/mp4", 5_000_000) == ".mp4"
+    assert parse_media_limit_mb(None) == 10
+    assert parse_media_limit_mb("20") == 20
+    assert validate_metadata("party.mp4", 20_000_000, "video/mp4", 20_000_000) == ".mp4"
     with pytest.raises(ValueError):
-        validate_metadata("party.mp4", 5_000_001, "video/mp4", 5_000_000)
+        validate_metadata("party.mp4", 20_000_001, "video/mp4", 20_000_000)
     with pytest.raises(ValueError):
         validate_media(b"\x00\x00\x00\x18ftypisom", ".mp4", 11)
-    with pytest.raises(ValueError, match="MAX_MEDIA_BYTES"):
-        parse_media_limit("0")
-    with pytest.raises(ValueError, match="MAX_MEDIA_BYTES"):
-        parse_media_limit("10000001")
-    with pytest.raises(ValueError, match="MAX_MEDIA_BYTES"):
-        parse_media_limit("five")
+    with pytest.raises(ValueError, match="MAX_MEDIA_MB"):
+        parse_media_limit_mb("0")
+    with pytest.raises(ValueError, match="MAX_MEDIA_MB"):
+        parse_media_limit_mb("1.5")
+    with pytest.raises(ValueError, match="MAX_MEDIA_MB"):
+        parse_media_limit_mb("twenty")
 
 
 def test_media_signatures():
