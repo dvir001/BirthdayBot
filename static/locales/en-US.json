@@ -28,7 +28,7 @@
   "state.media": "Saved",
   "state.server_disabled": "Disabled or no channel configured",
   "action.edit": "Edit birthday",
-  "action.schedule": "Schedule",
+  "action.schedule": "Edit schedule",
   "action.preview": "Test preview",
   "action.pause": "Pause participation",
   "action.resume": "Resume participation",

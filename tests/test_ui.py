@@ -50,11 +50,16 @@ def test_dashboard_has_combined_schedule_control():
     }
     controls = Dashboard(None, 1, 2, 2, profile).children
     labels = {item.label for item in controls}
-    assert {"Edit birthday", "Schedule"} <= labels
+    assert {"Edit birthday", "Edit schedule"} <= labels
     assert "Timezone" not in labels
     assert "Post time" not in labels
-    assert [item.label for item in controls[:2]] == ["Edit birthday", "Schedule"]
+    assert [item.label for item in controls[:2]] == ["Edit birthday", "Edit schedule"]
     assert controls[0].row == controls[1].row
+    pause = next(
+        index for index, item in enumerate(controls) if item.label == "Pause participation"
+    )
+    assert controls[pause + 1].label == "Skip next birthday"
+    assert controls[pause].row == controls[pause + 1].row == 1
 
 
 def test_announcement_time_modal_defaults_to_saved_time():

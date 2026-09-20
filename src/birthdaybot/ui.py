@@ -412,7 +412,7 @@ class Dashboard(OwnedView):
             allowed_mentions=discord.AllowedMentions.none(),
         )
 
-    @discord.ui.button(label=t("action.pause"))
+    @discord.ui.button(label=t("action.pause"), row=1)
     async def toggle(self, interaction, button):
         await interaction.response.defer()
         profile = await self.bot.db.get_profile(self.guild_id, self.user_id)
