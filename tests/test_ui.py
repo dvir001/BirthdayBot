@@ -48,10 +48,13 @@ def test_dashboard_has_combined_schedule_control():
         "media_name": None,
         "skip_date": None,
     }
-    labels = {item.label for item in Dashboard(None, 1, 2, 2, profile).children}
+    controls = Dashboard(None, 1, 2, 2, profile).children
+    labels = {item.label for item in controls}
     assert {"Edit birthday", "Schedule"} <= labels
     assert "Timezone" not in labels
     assert "Post time" not in labels
+    assert [item.label for item in controls[:2]] == ["Edit birthday", "Schedule"]
+    assert controls[0].row == controls[1].row
 
 
 def test_announcement_time_modal_defaults_to_saved_time():

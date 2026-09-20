@@ -375,7 +375,7 @@ class Dashboard(OwnedView):
             BirthdayModal(self.bot, self.guild_id, self.user_id, self.operator_id, profile)
         )
 
-    @discord.ui.button(label=t("action.schedule"), row=1)
+    @discord.ui.button(label=t("action.schedule"))
     async def schedule(self, interaction, button):
         profile = await self.bot.db.get_profile(self.guild_id, self.user_id)
         await interaction.response.edit_message(
