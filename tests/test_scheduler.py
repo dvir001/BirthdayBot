@@ -1,4 +1,4 @@
-from datetime import UTC, date, datetime
+from datetime import UTC, date, datetime, time
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, Mock
 
@@ -17,11 +17,12 @@ def delivery(monkeypatch):
         "month": 5,
         "day": 1,
         "timezone": "UTC",
+        "announcement_time": time(12),
         "reminders": [],
         "enabled": True,
         "skip_date": None,
-        "video": b"video",
-        "video_name": "birthday.mp4",
+        "media": b"video",
+        "media_name": "birthday.mp4",
         "updated_at": datetime(2026, 1, 1, tzinfo=UTC),
     }
     channel = SimpleNamespace(send=AsyncMock())
@@ -50,7 +51,7 @@ def delivery(monkeypatch):
     return Scheduler(bot), profile, event, {"channel_id": 3}, guild, member, channel
 
 
-async def test_birthday_attaches_video_and_mentions_only_member(delivery):
+async def test_birthday_attaches_media_and_mentions_only_member(delivery):
     scheduler, profile, event, settings, guild, member, channel = delivery
     await scheduler.deliver(profile, event, settings)
     scheduler.bot.db.claim.assert_awaited_once_with(profile, event, settings["channel_id"])

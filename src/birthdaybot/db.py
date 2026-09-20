@@ -1,12 +1,12 @@
-from datetime import date
+from datetime import date, time
 from importlib.resources import files
 
 from psycopg.rows import dict_row
 from psycopg_pool import AsyncConnectionPool
 
 PROFILE_COLUMNS = """
-    guild_id, user_id, month, day, timezone, reminders, enabled, skip_date,
-    left_at, updated_at, video_name
+    guild_id, user_id, month, day, timezone, announcement_time, reminders, enabled, skip_date,
+    left_at, updated_at, media_name
 """
 
 
@@ -49,8 +49,9 @@ class Database:
         day: int,
         timezone: str,
         reminders: list[str],
-        video: bytes | None,
-        video_name: str | None,
+        media: bytes | None,
+        media_name: str | None,
+        announcement_time: time = time(12),
     ):
         async with self.pool.connection() as connection, connection.transaction():
             await connection.execute(
@@ -59,16 +60,37 @@ class Database:
             )
             await connection.execute(
                 """INSERT INTO birthdays
-                    (guild_id, user_id, month, day, timezone, reminders, video, video_name)
-                   VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
+                    (guild_id, user_id, month, day, timezone, reminders,
+                     media, media_name, announcement_time)
+                                     VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
                    ON CONFLICT (guild_id, user_id) DO UPDATE SET
                     month = EXCLUDED.month, day = EXCLUDED.day, timezone = EXCLUDED.timezone,
+                                        announcement_time = EXCLUDED.announcement_time,
                     reminders = EXCLUDED.reminders,
-                    video = COALESCE(EXCLUDED.video, birthdays.video),
-                    video_name = COALESCE(EXCLUDED.video_name, birthdays.video_name),
+                    media = COALESCE(EXCLUDED.media, birthdays.media),
+                    media_name = COALESCE(EXCLUDED.media_name, birthdays.media_name),
                     left_at = NULL, updated_at = now()""",
-                (guild_id, user_id, month, day, timezone, reminders, video, video_name),
+                (
+                    guild_id,
+                    user_id,
+                    month,
+                    day,
+                    timezone,
+                    reminders,
+                    media,
+                    media_name,
+                    announcement_time,
+                ),
             )
+
+    async def set_schedule(
+        self, guild_id: int, user_id: int, timezone: str, announcement_time: time
+    ):
+        await self.execute(
+            """UPDATE birthdays SET timezone = %s, announcement_time = %s, updated_at = now()
+               WHERE guild_id = %s AND user_id = %s""",
+            (timezone, announcement_time, guild_id, user_id),
+        )
 
     async def set_enabled(self, guild_id: int, user_id: int, enabled: bool):
         await self.execute(
@@ -83,9 +105,9 @@ class Database:
             (birthday, guild_id, user_id),
         )
 
-    async def remove_video(self, guild_id: int, user_id: int):
+    async def remove_media(self, guild_id: int, user_id: int):
         await self.execute(
-            """UPDATE birthdays SET video = NULL, video_name = NULL, updated_at = now()
+            """UPDATE birthdays SET media = NULL, media_name = NULL, updated_at = now()
                WHERE guild_id = %s AND user_id = %s""",
             (guild_id, user_id),
         )

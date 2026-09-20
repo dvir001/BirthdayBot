@@ -1,7 +1,7 @@
 import asyncio
 import os
 import uuid
-from datetime import UTC, date, datetime
+from datetime import UTC, date, datetime, time
 
 import psycopg
 import pytest
@@ -43,12 +43,19 @@ async def test_profile_isolation_media_and_pause(db):
     await db.set_enabled(1, 2, False)
     await db.save_profile(1, 2, 6, 2, "Europe/London", [], None, None)
     profile = await db.get_profile(1, 2, media=True)
-    assert profile["video"] == b"video"
+    assert profile["media"] == b"video"
     assert not profile["enabled"]
     assert profile["day"] == 2
+    assert profile["announcement_time"] == time(12)
+    await db.set_schedule(1, 2, "Asia/Jerusalem", time(18, 30))
+    profile = await db.get_profile(1, 2)
+    assert (profile["timezone"], profile["announcement_time"]) == (
+        "Asia/Jerusalem",
+        time(18, 30),
+    )
     assert (await db.get_profile(4, 2))["day"] == 1
-    await db.remove_video(1, 2)
-    assert (await db.get_profile(1, 2, media=True))["video"] is None
+    await db.remove_media(1, 2)
+    assert (await db.get_profile(1, 2, media=True))["media"] is None
     await db.remove(1, 2)
     assert await db.get_profile(1, 2) is None
     assert await db.get_profile(4, 2) is not None
@@ -75,7 +82,7 @@ async def test_atomic_claim_and_control_states(db):
     await db.set_enabled(1, 2, True)
     assert not await db.claim(profile, reminder, 3)
     profile = await db.get_profile(1, 2)
-    await db.remove_video(1, 2)
+    await db.remove_media(1, 2)
     assert not await db.claim(profile, reminder, 3)
     profile = await db.get_profile(1, 2)
     assert await db.claim(profile, reminder, 3)

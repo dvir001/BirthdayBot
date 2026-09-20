@@ -5,15 +5,16 @@ native Discord forms, and PostgreSQL storage. Licensed under MIT.
 
 ## Commands
 
-- `/birthday`: opens a private region, subregion, and timezone selector for new
-  users; otherwise opens a private dashboard with configuration, edit, preview,
-  pause/resume, skip, and removal. The selector covers canonical IANA timezones.
+- `/birthday`: opens birthday setup immediately with UTC and 12:00 defaults for
+  new users; otherwise opens a private dashboard. A schedule control configures
+  timezone and local posting time together. Manage Server users can manage another member with
+  `/birthday user:@member`.
 - `/birthday-admin channel`: sets the server's birthday text channel.
 - `/birthday-admin enabled`: enables or disables all scheduling for the server.
   Both administrator commands require Manage Server at runtime.
 
 Birthdays use day/month only. Announcements and selected day/week/month reminders
-are scheduled at 12:00 in the member's IANA timezone. The bot checks every minute
+use the member's configured local time and IANA timezone. The bot checks every minute
 and catches up only within ten minutes of a scheduled time. February 29 falls on
 February 28 in non-leap years; a month-before reminder clamps to the last valid
 day of the previous month. DST follows the installed IANA timezone database.
@@ -24,11 +25,11 @@ public announcement. Skipping also suppresses remaining reminders for that
 occurrence; pausing suppresses all events until resumed. Tests are private previews
 and do not consume scheduled deliveries.
 
-Optional videos are limited to 10,000,000 bytes (10 MB), stored in PostgreSQL,
-and attached to birthday posts. MP4/MOV, WebM/MKV, AVI, MPEG, and Ogg video
-containers are supported with extension, MIME, and header checks. This is not
+Optional media is limited to 10,000,000 bytes (10 MB), stored in PostgreSQL, and
+attached to birthday posts. PNG, JPEG, GIF, WebP, MP4/MOV, WebM/MKV, AVI, MPEG,
+and Ogg video are supported with extension, MIME, and header checks. This is not
 transcoding or malware scanning; administrators should treat uploads as untrusted.
-An empty upload during editing preserves the current video; use Remove Video to
+An empty upload during editing preserves the current media; use Remove Media to
 delete it. Removing a birthday deletes its settings, media, and delivery history.
 
 Membership is checked directly with Discord before every scheduled delivery,
@@ -79,7 +80,7 @@ docker compose logs -f birthdaybot-app
 
 Use a strong `POSTGRES_PASSWORD` and the same URL-encoded password in `DATABASE_URL`.
 PostgreSQL is not exposed on a host port. The named volume contains settings,
-videos, and delivery history; back it up with `pg_dump` and test restoration.
+media, and delivery history; back it up with `pg_dump` and test restoration.
 Do not run `docker compose down -v` unless you intend to erase all stored data.
 Database major-version upgrades require a PostgreSQL migration, not just an image
 tag change.

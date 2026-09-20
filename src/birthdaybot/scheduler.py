@@ -5,7 +5,7 @@ import discord
 
 from birthdaybot.calendar import due_events, events_for_year
 from birthdaybot.i18n import t
-from birthdaybot.ui import channel_usable, notice_view, video_file
+from birthdaybot.ui import channel_usable, media_file, notice_view
 
 log = logging.getLogger(__name__)
 
@@ -88,20 +88,26 @@ class Scheduler:
         try:
             if event.kind == "notice":
                 birthday_event = events_for_year(
-                    current["month"], current["day"], current["timezone"], [], event.birthday.year
+                    current["month"],
+                    current["day"],
+                    current["timezone"],
+                    [],
+                    event.birthday.year,
+                    current["announcement_time"],
                 )[0]
                 await member.send(
                     t(
                         "post.notice",
                         server=discord.utils.escape_markdown(guild.name),
                         time=discord.utils.format_dt(birthday_event.due_at, "F"),
+                        local_time=current["announcement_time"].strftime("%H:%M"),
                         timezone=current["timezone"],
                     ),
                     view=notice_view(current, event.birthday),
                     allowed_mentions=discord.AllowedMentions.none(),
                 )
             else:
-                file = video_file(current) if event.kind == "birthday" else None
+                file = media_file(current) if event.kind == "birthday" else None
                 await channel.send(
                     t(
                         f"post.{event.kind}",

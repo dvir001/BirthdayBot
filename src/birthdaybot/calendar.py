@@ -25,14 +25,19 @@ def previous_month(value: date) -> date:
 
 
 def events_for_year(
-    month: int, day: int, timezone: str, reminders: list[str], year: int
+    month: int,
+    day: int,
+    timezone: str,
+    reminders: list[str],
+    year: int,
+    announcement_time: time = time(12),
 ) -> list[Event]:
     zone = ZoneInfo(timezone)
     birthday = birthday_in_year(month, day, year)
-    noon = datetime.combine(birthday, time(12), zone).astimezone(UTC)
+    announcement = datetime.combine(birthday, announcement_time, zone).astimezone(UTC)
     events = [
-        Event("birthday", birthday, noon),
-        Event("notice", birthday, noon - timedelta(hours=3)),
+        Event("birthday", birthday, announcement),
+        Event("notice", birthday, announcement - timedelta(hours=3)),
     ]
     for reminder in reminders:
         if reminder == "month":
@@ -41,15 +46,21 @@ def events_for_year(
             reminder_date = birthday - timedelta(days=1 if reminder == "day" else 7)
         else:
             raise ValueError(f"Unknown reminder: {reminder}")
-        due_at = datetime.combine(reminder_date, time(12), zone).astimezone(UTC)
+        due_at = datetime.combine(reminder_date, announcement_time, zone).astimezone(UTC)
         events.append(Event(reminder, birthday, due_at))
     return events
 
 
-def upcoming_birthday(month: int, day: int, timezone: str, now: datetime) -> date:
+def upcoming_birthday(
+    month: int,
+    day: int,
+    timezone: str,
+    now: datetime,
+    announcement_time: time = time(12),
+) -> date:
     year = now.astimezone(ZoneInfo(timezone)).year
     for candidate in (year, year + 1):
-        event = events_for_year(month, day, timezone, [], candidate)[0]
+        event = events_for_year(month, day, timezone, [], candidate, announcement_time)[0]
         if event.due_at > now:
             return event.birthday
     raise ValueError("No upcoming birthday")
@@ -60,7 +71,12 @@ def due_events(profile: dict, now: datetime) -> list[Event]:
     events = []
     for candidate in (year, year + 1):
         for event in events_for_year(
-            profile["month"], profile["day"], profile["timezone"], profile["reminders"], candidate
+            profile["month"],
+            profile["day"],
+            profile["timezone"],
+            profile["reminders"],
+            candidate,
+            profile.get("announcement_time", time(12)),
         ):
             if (
                 event.birthday != profile.get("skip_date")

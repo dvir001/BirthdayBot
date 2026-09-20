@@ -10,18 +10,38 @@ CREATE TABLE IF NOT EXISTS birthdays (
     month SMALLINT NOT NULL CHECK (month BETWEEN 1 AND 12),
     day SMALLINT NOT NULL CHECK (day BETWEEN 1 AND 31),
     timezone TEXT NOT NULL,
+    announcement_time TIME NOT NULL DEFAULT '12:00',
     reminders TEXT[] NOT NULL DEFAULT '{}'
         CHECK (reminders <@ ARRAY['day', 'week', 'month']::TEXT[]),
     enabled BOOLEAN NOT NULL DEFAULT TRUE,
     skip_date DATE,
     left_at TIMESTAMPTZ,
     updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
-    video BYTEA CHECK (octet_length(video) <= 10000000),
-    video_name TEXT,
+    media BYTEA CHECK (octet_length(media) <= 10000000),
+    media_name TEXT,
     PRIMARY KEY (guild_id, user_id),
     CHECK (day <= EXTRACT(DAY FROM
         (make_date(2000, month, 1) + INTERVAL '1 month - 1 day')))
 );
+
+ALTER TABLE birthdays
+    ADD COLUMN IF NOT EXISTS announcement_time TIME NOT NULL DEFAULT '12:00';
+
+DO $$
+BEGIN
+    IF EXISTS (
+        SELECT 1 FROM information_schema.columns
+        WHERE table_schema = current_schema() AND table_name = 'birthdays'
+            AND column_name = 'video'
+    ) AND NOT EXISTS (
+        SELECT 1 FROM information_schema.columns
+        WHERE table_schema = current_schema() AND table_name = 'birthdays'
+            AND column_name = 'media'
+    ) THEN
+        ALTER TABLE birthdays RENAME COLUMN video TO media;
+        ALTER TABLE birthdays RENAME COLUMN video_name TO media_name;
+    END IF;
+END $$;
 
 CREATE TABLE IF NOT EXISTS deliveries (
     guild_id BIGINT NOT NULL REFERENCES guild_settings ON DELETE CASCADE,

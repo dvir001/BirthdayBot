@@ -1,4 +1,4 @@
-from datetime import UTC, date, datetime, timedelta
+from datetime import UTC, date, datetime, time, timedelta
 
 import pytest
 
@@ -27,6 +27,13 @@ def test_dst_and_multiple_reminders():
     assert events["week"].due_at == datetime(2027, 3, 8, 17, tzinfo=UTC)
     assert events["notice"].due_at == events["birthday"].due_at - timedelta(hours=3)
     assert len(events) == 5
+
+
+def test_custom_announcement_time_and_noon_default():
+    default = events_for_year(5, 1, "UTC", [], 2027)[0]
+    custom = events_for_year(5, 1, "Asia/Jerusalem", [], 2027, time(18, 30))[0]
+    assert default.due_at == datetime(2027, 5, 1, 12, tzinfo=UTC)
+    assert custom.due_at == datetime(2027, 5, 1, 15, 30, tzinfo=UTC)
 
 
 def test_cross_year_reminders_and_skip():

@@ -2,7 +2,7 @@ import io
 import logging
 import re
 from collections import defaultdict
-from datetime import UTC, date, datetime
+from datetime import UTC, date, datetime, time
 from importlib.resources import files
 from zoneinfo import ZoneInfo
 
@@ -11,7 +11,7 @@ from discord import app_commands
 
 from birthdaybot.calendar import REMINDERS, events_for_year, upcoming_birthday
 from birthdaybot.i18n import t
-from birthdaybot.media import validate_metadata, validate_video
+from birthdaybot.media import validate_media, validate_metadata
 
 log = logging.getLogger(__name__)
 
@@ -81,13 +81,13 @@ async def report_error(interaction: discord.Interaction, error: Exception):
         await interaction.response.send_message(t("error.generic"), ephemeral=True)
 
 
-def video_file(profile: dict) -> discord.File | None:
-    if profile.get("video"):
-        return discord.File(io.BytesIO(profile["video"]), filename=profile["video_name"])
+def media_file(profile: dict) -> discord.File | None:
+    if profile.get("media"):
+        return discord.File(io.BytesIO(profile["media"]), filename=profile["media_name"])
     return None
 
 
-async def dashboard(bot, guild_id: int, user_id: int):
+async def dashboard(bot, guild_id: int, user_id: int, operator_id: int | None = None):
     profile = await bot.db.get_profile(guild_id, user_id)
     if profile is None:
         return t("error.missing"), None
@@ -102,9 +102,10 @@ async def dashboard(bot, guild_id: int, user_id: int):
             day=profile["day"],
             month=profile["month"],
             timezone=profile["timezone"],
+            announcement_time=profile["announcement_time"].strftime("%H:%M"),
             status=t("state.active" if profile["enabled"] else "state.paused"),
             reminders=reminders or t("state.none"),
-            video=t("state.video" if profile["video_name"] else "state.none"),
+            media=t("state.media" if profile["media_name"] else "state.none"),
             skip=profile["skip_date"] or t("state.none"),
             server=t(
                 "state.active"
@@ -113,14 +114,20 @@ async def dashboard(bot, guild_id: int, user_id: int):
             ),
         )
     )
-    return content, Dashboard(bot, guild_id, user_id, profile)
+    return content, Dashboard(bot, guild_id, user_id, operator_id or user_id, profile)
 
 
 class BirthdayModal(discord.ui.Modal):
-    def __init__(self, bot, guild_id: int, user_id: int, timezone: str, profile=None):
+    def __init__(self, bot, guild_id: int, user_id: int, operator_id: int, profile=None):
         super().__init__(title=t("setup.title"), timeout=600)
-        self.bot, self.guild_id, self.user_id = bot, guild_id, user_id
-        self.timezone = timezone
+        self.bot, self.guild_id, self.user_id, self.operator_id = (
+            bot,
+            guild_id,
+            user_id,
+            operator_id,
+        )
+        self.timezone = profile["timezone"] if profile else "UTC"
+        self.announcement_time = profile["announcement_time"] if profile else time(12)
         self.birthday = discord.ui.TextInput(
             placeholder=t("setup.date_placeholder"),
             min_length=3,
@@ -149,14 +156,14 @@ class BirthdayModal(discord.ui.Modal):
             self.add_item(discord.ui.Label(text=t(text), component=component))
         self.add_item(
             discord.ui.Label(
-                text=t("setup.video"),
-                description=t("setup.video_hint"),
+                text=t("setup.media"),
+                description=t("setup.media_hint"),
                 component=self.upload,
             )
         )
 
     async def on_submit(self, interaction: discord.Interaction):
-        if interaction.user.id != self.user_id or interaction.guild_id != self.guild_id:
+        if interaction.user.id != self.operator_id or interaction.guild_id != self.guild_id:
             await interaction.response.send_message(t("error.owner"), ephemeral=True)
             return
         try:
@@ -176,8 +183,8 @@ class BirthdayModal(discord.ui.Modal):
                     attachment.filename, attachment.size, attachment.content_type
                 )
                 data = await attachment.read()
-                validate_video(data, extension)
-                filename = f"birthday{extension}"
+                validate_media(data, extension)
+                filename = f"birthday-media{extension}"
             except ValueError as error:
                 await interaction.followup.send(t(str(error)), ephemeral=True)
                 return
@@ -190,21 +197,71 @@ class BirthdayModal(discord.ui.Modal):
             list(self.reminders.values),
             data,
             filename,
+            self.announcement_time,
         )
-        content, view = await dashboard(self.bot, self.guild_id, self.user_id)
+        content, view = await dashboard(self.bot, self.guild_id, self.user_id, self.operator_id)
         await interaction.followup.send(content, view=view, ephemeral=True)
 
     async def on_error(self, interaction: discord.Interaction, error: Exception):
         await report_error(interaction, error)
 
 
+class AnnouncementTimeModal(discord.ui.Modal):
+    def __init__(
+        self,
+        bot,
+        guild_id: int,
+        user_id: int,
+        operator_id: int,
+        timezone: str,
+        current: time,
+    ):
+        super().__init__(title=t("time.title"), timeout=600)
+        self.bot, self.guild_id, self.user_id, self.operator_id = (
+            bot,
+            guild_id,
+            user_id,
+            operator_id,
+        )
+        self.timezone = timezone
+        self.value = discord.ui.TextInput(
+            label=t("time.label"),
+            placeholder=t("time.placeholder"),
+            default=current.strftime("%H:%M"),
+            min_length=5,
+            max_length=5,
+        )
+        self.add_item(self.value)
+
+    async def on_submit(self, interaction: discord.Interaction):
+        if interaction.user.id != self.operator_id or interaction.guild_id != self.guild_id:
+            await interaction.response.send_message(t("error.owner"), ephemeral=True)
+            return
+        try:
+            announcement_time = time.fromisoformat(self.value.value)
+        except ValueError:
+            await interaction.response.send_message(t("error.time"), ephemeral=True)
+            return
+        await interaction.response.defer(ephemeral=True)
+        await self.bot.db.set_schedule(
+            self.guild_id, self.user_id, self.timezone, announcement_time
+        )
+        content, view = await dashboard(self.bot, self.guild_id, self.user_id, self.operator_id)
+        await interaction.followup.send(content, view=view, ephemeral=True)
+
+
 class OwnedView(discord.ui.View):
-    def __init__(self, bot, guild_id: int, user_id: int):
+    def __init__(self, bot, guild_id: int, user_id: int, operator_id: int):
         super().__init__(timeout=600)
-        self.bot, self.guild_id, self.user_id = bot, guild_id, user_id
+        self.bot, self.guild_id, self.user_id, self.operator_id = (
+            bot,
+            guild_id,
+            user_id,
+            operator_id,
+        )
 
     async def interaction_check(self, interaction: discord.Interaction):
-        allowed = interaction.user.id == self.user_id and interaction.guild_id == self.guild_id
+        allowed = interaction.user.id == self.operator_id and interaction.guild_id == self.guild_id
         if not allowed:
             await interaction.response.send_message(t("error.owner"), ephemeral=True)
         return allowed
@@ -223,9 +280,9 @@ class WizardSelect(discord.ui.Select):
 
 
 class TimezoneWizard(OwnedView):
-    def __init__(self, bot, guild_id: int, user_id: int, profile=None):
-        super().__init__(bot, guild_id, user_id)
-        self.profile = profile
+    def __init__(self, bot, guild_id: int, user_id: int, operator_id: int, current_time: time):
+        super().__init__(bot, guild_id, user_id, operator_id)
+        self.current_time = current_time
         self.region = None
         self.group = None
         self.rebuild()
@@ -282,7 +339,14 @@ class TimezoneWizard(OwnedView):
     async def choose(self, interaction: discord.Interaction, step: str, value: str):
         if step == "timezone":
             await interaction.response.send_modal(
-                BirthdayModal(self.bot, self.guild_id, self.user_id, value, self.profile)
+                AnnouncementTimeModal(
+                    self.bot,
+                    self.guild_id,
+                    self.user_id,
+                    self.operator_id,
+                    value,
+                    self.current_time,
+                )
             )
             return
         if step == "region":
@@ -294,22 +358,35 @@ class TimezoneWizard(OwnedView):
 
 
 class Dashboard(OwnedView):
-    def __init__(self, bot, guild_id: int, user_id: int, profile: dict):
-        super().__init__(bot, guild_id, user_id)
+    def __init__(self, bot, guild_id: int, user_id: int, operator_id: int, profile: dict):
+        super().__init__(bot, guild_id, user_id, operator_id)
         self.toggle.label = t("action.pause" if profile["enabled"] else "action.resume")
-        self.remove_media.disabled = not bool(profile["video_name"])
+        self.remove_media.disabled = not bool(profile["media_name"])
         self.restore.disabled = profile["skip_date"] is None
 
     async def refresh(self, interaction):
-        content, view = await dashboard(self.bot, self.guild_id, self.user_id)
+        content, view = await dashboard(self.bot, self.guild_id, self.user_id, self.operator_id)
         await interaction.edit_original_response(content=content, view=view)
 
     @discord.ui.button(label=t("action.edit"), style=discord.ButtonStyle.primary)
     async def edit(self, interaction, button):
         profile = await self.bot.db.get_profile(self.guild_id, self.user_id)
+        await interaction.response.send_modal(
+            BirthdayModal(self.bot, self.guild_id, self.user_id, self.operator_id, profile)
+        )
+
+    @discord.ui.button(label=t("action.schedule"), row=1)
+    async def schedule(self, interaction, button):
+        profile = await self.bot.db.get_profile(self.guild_id, self.user_id)
         await interaction.response.edit_message(
             content=t("setup.timezone_prompt"),
-            view=TimezoneWizard(self.bot, self.guild_id, self.user_id, profile),
+            view=TimezoneWizard(
+                self.bot,
+                self.guild_id,
+                self.user_id,
+                self.operator_id,
+                profile["announcement_time"],
+            ),
         )
 
     @discord.ui.button(label=t("action.preview"))
@@ -319,15 +396,15 @@ class Dashboard(OwnedView):
         if profile is None:
             await interaction.followup.send(t("error.missing"), ephemeral=True)
             return
-        if profile["video"] and len(profile["video"]) > interaction.filesize_limit:
-            await interaction.followup.send(t("error.video_limit"), ephemeral=True)
+        if profile["media"] and len(profile["media"]) > interaction.filesize_limit:
+            await interaction.followup.send(t("error.media_limit"), ephemeral=True)
             return
         embed = discord.Embed(
             title=t("preview.title"),
-            description=t("post.birthday", mention=interaction.user.mention),
+            description=t("post.birthday", mention=f"<@{self.user_id}>"),
         )
         embed.set_footer(text=t("preview.footer"))
-        file = video_file(profile)
+        file = media_file(profile)
         await interaction.followup.send(
             embed=embed,
             files=[file] if file else [],
@@ -349,7 +426,11 @@ class Dashboard(OwnedView):
         profile = await self.bot.db.get_profile(self.guild_id, self.user_id)
         if profile:
             birthday = upcoming_birthday(
-                profile["month"], profile["day"], profile["timezone"], datetime.now(UTC)
+                profile["month"],
+                profile["day"],
+                profile["timezone"],
+                datetime.now(UTC),
+                profile["announcement_time"],
             )
             await self.bot.db.skip(self.guild_id, self.user_id, birthday)
         await self.refresh(interaction)
@@ -360,16 +441,17 @@ class Dashboard(OwnedView):
         await self.bot.db.skip(self.guild_id, self.user_id, None)
         await self.refresh(interaction)
 
-    @discord.ui.button(label=t("action.remove_video"), row=2)
+    @discord.ui.button(label=t("action.remove_media"), row=2)
     async def remove_media(self, interaction, button):
         await interaction.response.defer()
-        await self.bot.db.remove_video(self.guild_id, self.user_id)
+        await self.bot.db.remove_media(self.guild_id, self.user_id)
         await self.refresh(interaction)
 
     @discord.ui.button(label=t("action.remove"), style=discord.ButtonStyle.danger, row=2)
     async def remove(self, interaction, button):
         await interaction.response.edit_message(
-            content=t("confirm.remove"), view=ConfirmRemoval(self.bot, self.guild_id, self.user_id)
+            content=t("confirm.remove"),
+            view=ConfirmRemoval(self.bot, self.guild_id, self.user_id, self.operator_id),
         )
 
 
@@ -425,7 +507,12 @@ class NoticeButton(
                 await interaction.followup.send(t("error.missing"), ephemeral=True)
                 return
             event = events_for_year(
-                profile["month"], profile["day"], profile["timezone"], [], self.birthday.year
+                profile["month"],
+                profile["day"],
+                profile["timezone"],
+                [],
+                self.birthday.year,
+                profile["announcement_time"],
             )[0]
             if event.birthday != self.birthday or event.due_at <= datetime.now(UTC):
                 await interaction.followup.send(t("error.expired"), ephemeral=True)
@@ -465,17 +552,22 @@ def channel_usable(channel, member) -> bool:
 def register_commands(bot):
     @bot.tree.command(name="birthday", description=t("command.birthday"))
     @app_commands.guild_only()
-    async def birthday(interaction: discord.Interaction):
-        profile = await bot.db.get_profile(interaction.guild_id, interaction.user.id)
+    @app_commands.describe(user=t("command.user_option"))
+    async def birthday(interaction: discord.Interaction, user: discord.Member | None = None):
+        target = user or interaction.user
+        if target.id != interaction.user.id and not interaction.user.guild_permissions.manage_guild:
+            await interaction.response.send_message(t("error.permissions"), ephemeral=True)
+            return
+        profile = await bot.db.get_profile(interaction.guild_id, target.id)
         if profile is None:
-            await interaction.response.send_message(
-                t("setup.timezone_prompt"),
-                view=TimezoneWizard(bot, interaction.guild_id, interaction.user.id),
-                ephemeral=True,
+            await interaction.response.send_modal(
+                BirthdayModal(bot, interaction.guild_id, target.id, interaction.user.id)
             )
         else:
             await interaction.response.defer(ephemeral=True)
-            content, view = await dashboard(bot, interaction.guild_id, interaction.user.id)
+            content, view = await dashboard(
+                bot, interaction.guild_id, target.id, interaction.user.id
+            )
             await interaction.followup.send(content, view=view, ephemeral=True)
 
     admin = app_commands.Group(
