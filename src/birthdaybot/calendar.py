@@ -66,6 +66,15 @@ def upcoming_birthday(
     raise ValueError("No upcoming birthday")
 
 
+def next_birthday_start(month: int, day: int, timezone: str, now: datetime) -> datetime:
+    zone = ZoneInfo(timezone)
+    year = now.astimezone(zone).year
+    start = datetime.combine(birthday_in_year(month, day, year), time(), zone)
+    if start + timedelta(days=1) <= now:
+        start = datetime.combine(birthday_in_year(month, day, year + 1), time(), zone)
+    return start
+
+
 def due_events(profile: dict, now: datetime) -> list[Event]:
     year = now.astimezone(ZoneInfo(profile["timezone"])).year
     events = []

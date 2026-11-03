@@ -9,7 +9,12 @@ from zoneinfo import ZoneInfo
 import discord
 from discord import app_commands
 
-from birthdaybot.calendar import REMINDERS, events_for_year, upcoming_birthday
+from birthdaybot.calendar import (
+    REMINDERS,
+    events_for_year,
+    next_birthday_start,
+    upcoming_birthday,
+)
 from birthdaybot.i18n import t
 from birthdaybot.media import (
     BYTES_PER_MB,
@@ -561,12 +566,25 @@ def channel_usable(channel, member) -> bool:
     )
 
 
-def birthday_list(rows: list[dict], limit: int = 2000) -> list[str]:
+def birthday_list(rows: list[dict], now: datetime, limit: int = 2000) -> list[str]:
     if not rows:
         return [t("list.empty")]
+    entries = sorted(
+        (
+            (next_birthday_start(row["month"], row["day"], row["timezone"], now), row)
+            for row in rows
+        ),
+        key=lambda entry: entry[0],
+    )
     pages, page = [], "**" + t("list.title") + "**"
-    for row in rows:
-        line = t("list.line", day=row["day"], month=row["month"], user=row["user_id"])
+    for start, row in entries:
+        line = t(
+            "list.line",
+            day=row["day"],
+            month=row["month"],
+            timestamp=int(start.timestamp()),
+            user=row["user_id"],
+        )
         if len(page) + 1 + len(line) > limit:
             pages.append(page)
             page = line
@@ -602,7 +620,7 @@ def register_commands(bot):
     async def birthdays(interaction: discord.Interaction):
         await interaction.response.defer(ephemeral=True)
         rows = await bot.db.guild_birthdays(interaction.guild_id)
-        for page in birthday_list(rows):
+        for page in birthday_list(rows, datetime.now(UTC)):
             await interaction.followup.send(page, ephemeral=True)
 
     admin = app_commands.Group(

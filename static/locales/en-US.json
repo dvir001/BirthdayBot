@@ -24,7 +24,7 @@
   "dashboard.title": "Your birthday settings",
   "dashboard.body": "Birthday: {day:02d}/{month:02d}\nTimezone: {timezone}\nPosting time: {announcement_time}\nParticipation: {status}\nReminders: {reminders}\nMedia: {media}\nSkipped occurrence: {skip}\nServer scheduling: {server}",
   "list.title": "Birthdays in this server",
-  "list.line": "{day:02d}/{month:02d}: <@{user}>",
+  "list.line": "{day:02d}/{month:02d} (<t:{timestamp}:R>): <@{user}>",
   "list.empty": "No birthdays are set up in this server yet. Use /birthday to add yours.",
   "state.active": "Enabled",
   "state.paused": "Paused",

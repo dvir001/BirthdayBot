@@ -146,7 +146,7 @@ class Database:
 
     async def guild_birthdays(self, guild_id: int):
         cursor = await self.execute(
-            """SELECT user_id, month, day FROM birthdays
+            """SELECT user_id, month, day, timezone FROM birthdays
                WHERE guild_id = %s AND enabled AND left_at IS NULL
                ORDER BY month, day, user_id""",
             (guild_id,),

@@ -70,8 +70,8 @@ async def test_guild_birthdays_lists_active_members_by_date(db):
     await db.set_enabled(1, 6, False)
     await db.membership(1, 7, False)
     assert await db.guild_birthdays(1) == [
-        {"user_id": 5, "month": 1, "day": 9},
-        {"user_id": 2, "month": 5, "day": 1},
+        {"user_id": 5, "month": 1, "day": 9, "timezone": "UTC"},
+        {"user_id": 2, "month": 5, "day": 1, "timezone": "UTC"},
     ]
 
 

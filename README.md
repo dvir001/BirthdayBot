@@ -9,8 +9,8 @@ native Discord forms, and PostgreSQL storage. Licensed under MIT.
   new users; otherwise opens a private dashboard. A schedule control configures
   timezone and local posting time together. Manage Server users can manage another member with
   `/birthday user:@member`.
-- `/birthdays`: privately lists every member's birthday (DD/MM) in this server,
-  sorted by date. Paused and departed members are left out.
+- `/birthdays`: privately lists every member's birthday (DD/MM) in this server with a
+  relative countdown, closest upcoming first. Paused and departed members are left out.
 - `/birthday-admin channel`: sets the server's birthday text channel.
 - `/birthday-admin enabled`: enables or disables all scheduling for the server.
   Both administrator commands require Manage Server at runtime.

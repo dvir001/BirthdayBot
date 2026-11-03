@@ -1,5 +1,5 @@
 import re
-from datetime import date, time
+from datetime import UTC, date, datetime, time
 from types import SimpleNamespace
 from unittest.mock import AsyncMock
 
@@ -123,24 +123,36 @@ async def test_commands_register_without_login():
 
 
 def test_birthday_list_formats_and_splits():
-    assert birthday_list([]) == [
+    now = datetime(2027, 6, 15, 12, tzinfo=UTC)
+    assert birthday_list([], now) == [
         "No birthdays are set up in this server yet. Use /birthday to add yours."
     ]
     rows = [
-        {"user_id": 3, "month": 1, "day": 2},
-        {"user_id": 4, "month": 1, "day": 2},
-        {"user_id": 5, "month": 12, "day": 25},
+        {"user_id": 3, "month": 1, "day": 2, "timezone": "UTC"},
+        {"user_id": 4, "month": 6, "day": 15, "timezone": "Asia/Tokyo"},
+        {"user_id": 5, "month": 12, "day": 25, "timezone": "UTC"},
     ]
-    assert birthday_list(rows) == [
-        "**Birthdays in this server**\n02/01: <@3>\n02/01: <@4>\n25/12: <@5>"
+    stamp = {
+        user: int(datetime(*moment, tzinfo=UTC).timestamp())
+        for user, moment in [(3, (2028, 1, 2)), (4, (2027, 6, 14, 15)), (5, (2027, 12, 25))]
+    }
+    lines = {
+        3: f"02/01 (<t:{stamp[3]}:R>): <@3>",
+        4: f"15/06 (<t:{stamp[4]}:R>): <@4>",
+        5: f"25/12 (<t:{stamp[5]}:R>): <@5>",
+    }
+    title = "**Birthdays in this server**"
+    assert birthday_list(rows, now) == ["\n".join([title, lines[4], lines[5], lines[3]])]
+    first = f"{title}\n{lines[4]}"
+    assert birthday_list(rows, now, limit=len(first) + len(lines[5])) == [
+        first,
+        f"{lines[5]}\n{lines[3]}",
     ]
-    pages = birthday_list(rows, limit=40)
-    assert pages == ["**Birthdays in this server**\n02/01: <@3>", "02/01: <@4>\n25/12: <@5>"]
 
 
 async def test_birthdays_command_lists_privately():
     bot = BirthdayBot("postgresql://localhost/test")
-    rows = [{"user_id": 3, "month": 7, "day": 4}]
+    rows = [{"user_id": 3, "month": 7, "day": 4, "timezone": "UTC"}]
     bot.db = SimpleNamespace(guild_birthdays=AsyncMock(return_value=rows), close=AsyncMock())
     interaction = SimpleNamespace(
         guild_id=1,
@@ -151,8 +163,10 @@ async def test_birthdays_command_lists_privately():
     await bot.tree.get_command("birthdays").callback(interaction)
 
     bot.db.guild_birthdays.assert_awaited_once_with(1)
-    interaction.followup.send.assert_awaited_once_with(
-        "**Birthdays in this server**\n04/07: <@3>", ephemeral=True
+    page = interaction.followup.send.await_args
+    assert page.kwargs == {"ephemeral": True}
+    assert re.fullmatch(
+        r"\*\*Birthdays in this server\*\*\n04/07 \(<t:\d+:R>\): <@3>", page.args[0]
     )
     await bot.close()
 
